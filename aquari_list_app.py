@@ -11,58 +11,68 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, Font
-import zipfile
 
-# Set Streamlit page config FIRST
 st.set_page_config(page_title="Aquari-List", layout="wide", page_icon="📺")
 
-# ========== STYLING ==========
-dark_mode = st.toggle("Dark Mode")
-if dark_mode:
-    st.markdown("""
-        <style>
-            .stApp { background-color: #2e2e2e; color: white; }
-        </style>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-        <style>
-            .stApp { background-color: #0492c2; }
-        </style>
-    """, unsafe_allow_html=True)
+st.title("Aquari-List")
 
-st.markdown("""
-    <style>
-        .title-text {
-            font-family: 'American Typewriter', serif;
-            font-size: 36pt;
-            font-weight: bold;
-            color: white;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .footer-text {
-            font-size: 10pt;
-            text-align: center;
-            margin-top: 60px;
-            color: white;
-        }
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-            max-width: 1200px;
-            margin: auto;
-        }
-        .stButton>button, .stTextInput>div>input, .stNumberInput>div input {
-            width: 100% !important;
-        }
-        .element-container:has(.stSelectbox) {
-            text-align: center;
-        }
-    </style>
-""", unsafe_allow_html=True)
+video_file = st.file_uploader("Upload video", type=["mp4", "mov"])
+csv_file = st.file_uploader("Upload CSV", type=["csv"])
 
-st.markdown('<div class="title-text">Aquari-List</div>', unsafe_allow_html=True)
+if video_file and csv_file:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        video_path = os.path.join(tmpdir, video_file.name)
+        csv_path = os.path.join(tmpdir, csv_file.name)
+
+        with open(video_path, "wb") as f:
+            f.write(video_file.read())
+        with open(csv_path, "wb") as f:
+            f.write(csv_file.read())
+
+        df = pd.read_csv(csv_path)
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
+        def timecode_to_seconds(tc):
+            h, m, s, f = map(int, tc.split(':'))
+            return h * 3600 + m * 60 + s + f / fps
+
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cpu")
+
+        descriptions = []
+
+        for idx, row in df.iterrows():
+            try:
+                start_tc = row['Time Code In']
+                end_tc = row['Time Code Out']
+                mid_sec = (timecode_to_seconds(start_tc) + timecode_to_seconds(end_tc)) / 2.0
+                frame_num = int(mid_sec * fps)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ret, frame = cap.read()
+                if not ret:
+                    descriptions.append("Failed to read frame.")
+                    continue
+                img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                inputs = processor(images=img, return_tensors="pt").to("cpu")
+                with torch.no_grad():
+                    output = model.generate(**inputs)
+                caption = processor.decode(output[0], skip_special_tokens=True)
+                descriptions.append(caption)
+            except Exception as e:
+                descriptions.append(f"Caption error: {str(e)}")
+
+        df["Description"] = descriptions
+
+        output_excel = os.path.join(tmpdir, "output.xlsx")
+        df.to_excel(output_excel, index=False)
+
+        with open(output_excel, "rb") as f:
+            st.download_button("Download Excel with Descriptions", f, file_name="Aquari-List_Descriptions.xlsx")
+
 
 # ========== Uploads and Options ==========
 st.markdown("""<div style='display: flex; justify-content: center;'>""", unsafe_allow_html=True)
