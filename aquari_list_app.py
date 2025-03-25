@@ -40,12 +40,10 @@ st.markdown("""
 
 st.markdown('<div class="title-text">Aquari-List</div>', unsafe_allow_html=True)
 
-# Upload fields
 video_file = st.file_uploader("Upload your video file", type=["mp4", "mov"])
 csv_file = st.file_uploader("Upload your CSV file with timecodes", type=["csv"])
 include_images = st.checkbox("Include images in Excel export")
 
-# Metadata section
 st.subheader("Optional Metadata")
 meta1, meta2, meta3, meta4, meta5 = st.columns(5)
 project_name = meta1.text_input("Project Name")
@@ -56,9 +54,13 @@ date = meta5.text_input("Date")
 
 if video_file and csv_file:
     st.write("📦 Loading BLIP processor/model...")
-    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cpu")
-    st.write("✅ BLIP model loaded.")
+    try:
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cpu")
+        st.write("✅ BLIP model loaded.")
+    except Exception as e:
+        st.error(f"❌ Failed to load model: {e}")
+        st.stop()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         video_path = os.path.join(tmpdir, video_file.name)
@@ -69,9 +71,14 @@ if video_file and csv_file:
         with open(csv_path, "wb") as f:
             f.write(csv_file.read())
 
-        df = pd.read_csv(csv_path)
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
+
+        if not cap.isOpened() or fps == 0:
+            st.error("🚫 Failed to read video or FPS is 0. Please check your video file format.")
+            st.stop()
+
+        df = pd.read_csv(csv_path)
 
         def timecode_to_seconds(tc):
             try:
@@ -91,10 +98,11 @@ if video_file and csv_file:
                 frame_num = int(mid_sec * fps)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
                 ret, frame = cap.read()
-                if not ret:
+                if not ret or frame is None:
                     descriptions.append("Failed to read frame.")
                     image_paths.append(None)
                     continue
+
                 img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 if img.mode != "RGB":
                     img = img.convert("RGB")
@@ -105,7 +113,6 @@ if video_file and csv_file:
                 caption = processor.decode(output[0], skip_special_tokens=True)
                 descriptions.append(caption)
 
-                # Save image for embedding
                 frame_path = os.path.join(tmpdir, f"frame_{idx}.png")
                 img.thumbnail((320, 180))
                 img.save(frame_path)
@@ -147,11 +154,14 @@ if video_file and csv_file:
         if include_images:
             for idx, path in enumerate(image_paths):
                 if path:
-                    img = XLImage(path)
-                    img.width, img.height = 160, 90
-                    cell = f"{chr(65 + len(df.columns))}{idx + len(metadata) + 2}"
-                    ws.add_image(img, cell)
-                    ws.row_dimensions[idx + len(metadata) + 2].height = 70
+                    try:
+                        img = XLImage(path)
+                        img.width, img.height = 160, 90
+                        cell = f"{chr(65 + len(df.columns))}{idx + len(metadata) + 2}"
+                        ws.add_image(img, cell)
+                        ws.row_dimensions[idx + len(metadata) + 2].height = 70
+                    except Exception as e:
+                        logging.warning(f"Image insert failed for row {idx}: {e}")
 
         wb.save(output_excel)
 
