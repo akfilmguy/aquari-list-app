@@ -178,7 +178,7 @@ if video_file and csv_file and st.button("Generate Descriptions and Export"):
                 image_paths.append(frame_path)
 
                 # Generate caption
-                inputs = processor(img, return_tensors="pt").to("cpu")
+                inputs = processor(images=[img], return_tensors="pt", padding=True).to("cpu")
                 with torch.no_grad():
                     output = model.generate(**inputs)
                 caption = processor.decode(output[0], skip_special_tokens=True)
