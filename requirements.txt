@@ -1,0 +1,7 @@
+Streamlit
+Pandas
+Opencv-python
+Transformers
+Torch
+Pillow
+Openpyxl
