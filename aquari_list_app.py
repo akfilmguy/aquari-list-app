@@ -1,4 +1,6 @@
 import streamlit as st
+st.set_page_config(page_title="Aquari-List", layout="wide", page_icon="📺")
+
 import pandas as pd
 import cv2
 import os
@@ -12,12 +14,8 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils.dataframe import dataframe_to_rows
 
-# Logging to help catch early failures
 logging.basicConfig(level=logging.DEBUG)
 st.write("🔧 App started loading...")
-
-# Page config
-st.set_page_config(page_title="Aquari-List", layout="wide", page_icon="📺")
 
 # Styling
 st.markdown("""
