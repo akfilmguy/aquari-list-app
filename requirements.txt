@@ -1,7 +1,7 @@
-Streamlit
-Pandas
-Opencv-python
-Transformers
-Torch
+streamlit
+pandas
+opencv-python
 Pillow
-Openpyxl
+transformers
+torch
+openpyxl
