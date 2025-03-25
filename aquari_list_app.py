@@ -3,14 +3,18 @@ import pandas as pd
 import cv2
 import os
 import tempfile
+import logging
 from PIL import Image
-from io import BytesIO
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import torch
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils.dataframe import dataframe_to_rows
+
+# Logging to help catch early failures
+logging.basicConfig(level=logging.DEBUG)
+st.write("🔧 App started loading...")
 
 # Page config
 st.set_page_config(page_title="Aquari-List", layout="wide", page_icon="📺")
@@ -53,6 +57,11 @@ network = meta4.text_input("Network")
 date = meta5.text_input("Date")
 
 if video_file and csv_file:
+    st.write("📦 Loading BLIP processor/model...")
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cpu")
+    st.write("✅ BLIP model loaded.")
+
     with tempfile.TemporaryDirectory() as tmpdir:
         video_path = os.path.join(tmpdir, video_file.name)
         csv_path = os.path.join(tmpdir, csv_file.name)
@@ -72,9 +81,6 @@ if video_file and csv_file:
                 return h * 3600 + m * 60 + s + f / fps
             except:
                 return 0
-
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to("cpu")
 
         descriptions = []
         image_paths = []
